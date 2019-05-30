@@ -52,18 +52,39 @@ func TestArenaAllocateAlign(t *testing.T) {
 	}
 }
 
-func TestArenaGrow(t *testing.T) {
+func TestArenaAllocateSlot(t *testing.T) {
 	a := NewArena(128)
-	n := a.Grow(64, 0)
-	if n != 1 {
-		t.Fatal("grow 64 bytes start pos error")
+	begin, end := a.AllocateSlot(64)
+	if end-begin != 64 {
+		t.Fatal("allocate slot 64 length error")
 	}
-	n = a.Grow(7, 8)
-	if n != 65 {
-		t.Fatal("grow 7 bytes with align 8 start pos error")
+	if begin != 1 || end != 64+1 {
+		t.Fatal("allocate slot 64 range error")
 	}
-	n = a.Grow(7, 16)
-	if n != 96 {
-		t.Fatal("grow 7 bytes with align 16 start pos error")
+
+	begin, end = a.AllocateSlot(25)
+	if end-begin != 25 {
+		t.Fatal("allocate slot 25 length error")
+	}
+	if begin != 64+1 || end != 64+1+25 {
+		t.Fatal("allocate slot 25 range error")
+	}
+}
+
+func TestArenaAllocateSlotAlign(t *testing.T) {
+	a := NewArena(128)
+	begin, end := a.AllocateSlotAligned(5, 7)
+	if end-begin != 5 {
+		t.Fatal("allocate slot aligned 5 length error")
+	}
+	if begin != 8 {
+		t.Fatal("allocate slot aligned 5 start error")
+	}
+	begin, end = a.AllocateSlotAligned(23, 7)
+	if end-begin != 23 {
+		t.Fatal("allocate slot aligned 23 length error")
+	}
+	if begin != 16 {
+		t.Fatal("allocate slot aligned 23 start error")
 	}
 }

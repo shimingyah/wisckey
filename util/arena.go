@@ -23,10 +23,11 @@ import (
 
 // Allocator the interface of allocator
 type Allocator interface {
-	Grow(n, align uint32) uint32
-	Acquire(offset, size uint32) []byte
 	Allocate(n uint32) []byte
 	AllocateAligned(n, align uint32) []byte
+	AllocateSlot(n uint32) (begin, end uint32)
+	AllocateSlotAligned(n, align uint32) (begin, end uint32)
+	Acquire(offset, size uint32) []byte
 	Size() int64
 	Reset()
 }
@@ -48,9 +49,21 @@ func NewArena(n int64) *Arena {
 	return a
 }
 
-// Grow grows the buffer to guarantee space for n more bytes.
+// AllocateSlot allocate n bytes return the pos begin and end.
 // If the free space isn't enough, it will panic.
-func (a *Arena) Grow(n, align uint32) uint32 {
+func (a *Arena) AllocateSlot(n uint32) (begin, end uint32) {
+	total := atomic.AddUint32(&a.off, n)
+	if total > uint32(len(a.buf)) {
+		panic(fmt.Sprintf("Arena too small, alloc:%d newTotal:%d limit:%d", n, total, len(a.buf)))
+	}
+
+	m := total - n
+	return m, m + n
+}
+
+// AllocateSlotAligned allocate aligned n bytes return the pos begin and end.
+// If the free space isn't enough, it will panic.
+func (a *Arena) AllocateSlotAligned(n, align uint32) (begin, end uint32) {
 	// Pad the allocation with enough bytes to ensure alignment.
 	l := uint32(n + align)
 	total := atomic.AddUint32(&a.off, l)
@@ -58,13 +71,8 @@ func (a *Arena) Grow(n, align uint32) uint32 {
 		panic(fmt.Sprintf("Arena too small, alloc:%d align:%d newTotal:%d limit:%d", n, align, total, len(a.buf)))
 	}
 
-	m := total - l
-	//  need to align
-	if align != 0 {
-		m = (total - l + uint32(align)) & ^uint32(align)
-	}
-
-	return m
+	m := (total - l + uint32(align)) & ^uint32(align)
+	return m, m + n
 }
 
 // Acquire get the byte by given offset and size.
@@ -76,26 +84,15 @@ func (a *Arena) Acquire(offset, size uint32) []byte {
 // Allocate allocs n bytes of slice from the buffer.
 // If the free space isn't enough, it will panic.
 func (a *Arena) Allocate(n uint32) []byte {
-	total := atomic.AddUint32(&a.off, n)
-	if total > uint32(len(a.buf)) {
-		panic(fmt.Sprintf("Arena too small, alloc:%d newTotal:%d limit:%d", n, total, len(a.buf)))
-	}
-	return a.buf[total-n : total]
+	m, n := a.AllocateSlot(n)
+	return a.buf[m:n]
 }
 
 // AllocateAligned align allocs n bytes of slice from the buffer.
 // If the free space isn't enough, it will panic.
 func (a *Arena) AllocateAligned(n, align uint32) []byte {
-	// Pad the allocation with enough bytes to ensure alignment.
-	l := uint32(n + align)
-	total := atomic.AddUint32(&a.off, l)
-	if total > uint32(len(a.buf)) {
-		panic(fmt.Sprintf("Arena too small, alloc:%d align:%d newTotal:%d limit:%d", n, align, total, len(a.buf)))
-	}
-
-	// calc the aligned offset.
-	m := (total - l + uint32(align)) & ^uint32(align)
-	return a.buf[m : m+n]
+	m, n := a.AllocateSlotAligned(n, align)
+	return a.buf[m:n]
 }
 
 // Size return used mem size.
