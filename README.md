@@ -4,20 +4,6 @@ WisckeyDB is an embeddable, persistent and fast key-value (KV) database
 written in pure Go. It's meant to be a performant alternative to non-Go-based
 key-value stores like [RocksDB](https://github.com/facebook/rocksdb).
 
-## Project Status [Oct 27, 2018]
-
-Wisckey is stable and is being used to serve data sets worth hundreds of
-terabytes. Wisckey supports concurrent ACID transactions with serializable
-snapshot isolation (SSI) guarantees. A Jepsen-style bank test runs nightly for
-8h, with `--race` flag and ensures maintainance of transactional guarantees.
-Wisckey has also been tested to work with filesystem level anomalies, to ensure
-persistence and consistency.
-
-Wisckey v1.0 was released in Nov 2017, with a Wisckey v2.0 release coming up in a
-few months. The [Changelog] is kept fairly up-to-date.
-
-[Changelog]:https://github.com/dgraph-io/wisckey/blob/master/CHANGELOG.md
-
 ## Table of Contents
  * [Getting Started](#getting-started)
     + [Installing](#installing)
@@ -53,7 +39,7 @@ few months. The [Changelog] is kept fairly up-to-date.
 To start using Wisckey, install Go 1.8 or above and run `go get`:
 
 ```sh
-$ go get github.com/dgraph-io/wisckey/...
+$ go get github.com/shimingyah/wisckey/...
 ```
 
 This will retrieve the library and install the `wisckey` command line
@@ -74,7 +60,7 @@ package main
 import (
 	"log"
 
-	"github.com/dgraph-io/wisckey"
+	"github.com/shimingyah/wisckey"
 )
 
 func main() {
@@ -587,7 +573,7 @@ These metrics can then be collected by a system like [Prometheus], to get
 better visibility into what Wisckey is doing.
 
 [expvar]: https://golang.org/pkg/expvar/
-[metrics]: https://github.com/dgraph-io/wisckey/blob/master/y/metrics.go
+[metrics]: https://github.com/shimingyah/wisckey/blob/master/y/metrics.go
 [Prometheus]: https://prometheus.io/
 
 ## Resources
@@ -644,7 +630,7 @@ benchmarking code, and the detailed logs for the benchmarks can be found in the
 [wisckey-bench] repo. More explanation, including graphs can be found the blog posts (linked
 above).
 
-[wisckey-bench]: https://github.com/dgraph-io/wisckey-bench
+[wisckey-bench]: https://github.com/shimingyah/wisckey-bench
 
 ## Frequently Asked Questions
 - **My writes are getting stuck. Why?**
@@ -660,8 +646,8 @@ acquire read locks over the value log files to avoid value log GC removing the
 file from underneath. As a side effect, this also blocks a new value log GC
 file from being created, when the value log file boundary is hit.
 
-Please see Github issues [#293](https://github.com/dgraph-io/wisckey/issues/293)
-and [#315](https://github.com/dgraph-io/wisckey/issues/315).
+Please see Github issues [#293](https://github.com/shimingyah/wisckey/issues/293)
+and [#315](https://github.com/shimingyah/wisckey/issues/315).
 
 There are multiple workarounds during iteration:
 
@@ -707,7 +693,7 @@ the database, you'll see these writes on disk.
 
 - **Reverse iteration doesn't give me the right results.**
 
-Just like forward iteration goes to the first key which is equal or greater than the SEEK key, reverse iteration goes to the first key which is equal or lesser than the SEEK key. Therefore, SEEK key would not be part of the results. You can typically add a `0xff` byte as a suffix to the SEEK key to include it in the results. See the following issues: [#436](https://github.com/dgraph-io/wisckey/issues/436) and [#347](https://github.com/dgraph-io/wisckey/issues/347).
+Just like forward iteration goes to the first key which is equal or greater than the SEEK key, reverse iteration goes to the first key which is equal or lesser than the SEEK key. Therefore, SEEK key would not be part of the results. You can typically add a `0xff` byte as a suffix to the SEEK key to include it in the results. See the following issues: [#436](https://github.com/shimingyah/wisckey/issues/436) and [#347](https://github.com/shimingyah/wisckey/issues/347).
 
 - **Which instances should I use for Wisckey?**
 
@@ -735,9 +721,9 @@ thread](https://groups.google.com/d/topic/golang-nuts/jPb_h3TvlKE/discussion).
 
 We recommend setting max file descriptors to a high number depending upon the expected size of you data.
 
-## Contact
-- Please use [discuss.dgraph.io](https://discuss.dgraph.io) for questions, feature requests and discussions.
-- Please use [Github issue tracker](https://github.com/dgraph-io/wisckey/issues) for filing bugs or feature requests.
-- Join [![Slack Status](http://slack.dgraph.io/badge.svg)](http://slack.dgraph.io).
-- Follow us on Twitter [@dgraphlabs](https://twitter.com/dgraphlabs).
+## Reference
+The Wisckey library references the badger from dgraph-io. We make some minor adjustments and refined the example.
+
+## License
+Wisckey is under the Apache 2.0 license. See the [LICENSE](https://github.com/shimingyah/wisckey/blob/master/LICENSE) file for details.
 
