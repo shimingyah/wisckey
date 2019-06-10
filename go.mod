@@ -8,6 +8,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/golang/protobuf v1.3.1
 	github.com/pkg/errors v0.8.1
+	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.3.0
 	golang.org/x/net v0.0.0-20190607181551-461777fb6f67
 	golang.org/x/sys v0.0.0-20190609082536-301114b31cce
