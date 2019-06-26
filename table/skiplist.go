@@ -192,6 +192,25 @@ func (s *Skiplist) Get(key []byte) []byte {
 	return value
 }
 
+// GetWithKey gets the value associated with the key. It returns a valid key and value
+// if it finds equal or earlier version of the same key, it can be used impl multi version key.
+func (s *Skiplist) GetWithKey(key []byte) (nkey, value []byte) {
+	n, _ := s.findNear(key, false, true) // findGreaterOrEqual.
+	if n == nil {
+		return nil, nil
+	}
+
+	nextKey := s.allocator.Acquire(n.keyOffset, uint32(n.keySize))
+	if !s.KeyEqualizer(key, nextKey) {
+		return nil, nil
+	}
+
+	valOffset, valSize := n.getValueOffset()
+	value = s.allocator.Acquire(uint32(valOffset), uint32(valSize))
+
+	return nextKey, value
+}
+
 // Put inserts the key-value pair.
 func (s *Skiplist) Put(key, value []byte) {
 	// Since we allow overwrite, we may not need to create a new node. We might not even need to
