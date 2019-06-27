@@ -29,7 +29,7 @@ Key differences:
 - We combine the findLessThan, findGreaterOrEqual, etc into one function.
 */
 
-package table
+package util
 
 import (
 	"bytes"
@@ -38,8 +38,6 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"unsafe"
-
-	"github.com/shimingyah/wisckey/util"
 )
 
 const (
@@ -63,7 +61,7 @@ type Skiplist struct {
 	height        int32 // Current height. 1 <= height <= kMaxHeight. CAS.
 	head          *node
 	ref           int32
-	allocator     util.Allocator
+	allocator     Allocator
 	KeyComparator func(key1, key2 []byte) int
 	KeyEqualizer  func(key1, key2 []byte) bool
 }
@@ -119,7 +117,7 @@ func defaultKeyEqualizer(key1, key2 []byte) bool {
 
 // NewSkiplist makes a new empty skiplist, with a given arena size
 func NewSkiplist(arenaSize int64, options ...Option) *Skiplist {
-	allocator := util.NewArena(arenaSize)
+	allocator := NewArena(arenaSize)
 	head := newNode(allocator, nil, nil, maxHeight)
 	s := &Skiplist{
 		height:        1,
@@ -248,13 +246,13 @@ func (s *Skiplist) Put(key, value []byte) {
 	for i := 0; i < height; i++ {
 		for {
 			if prev[i] == nil {
-				util.AssertTrue(i > 1) // This cannot happen in base level.
+				AssertTrue(i > 1) // This cannot happen in base level.
 				// We haven't computed prev, next for this level because height exceeds old listHeight.
 				// For these levels, we expect the lists to be sparse, so we can just search from head.
 				prev[i], next[i] = s.findSpliceForLevel(key, s.head, i)
 				// Someone adds the exact same key before we are able to do so. This can only happen on
 				// the base level. But we know we are not on the base level.
-				util.AssertTrue(prev[i] != next[i])
+				AssertTrue(prev[i] != next[i])
 			}
 			nextOffset := getNodeOffset(s.allocator, next[i])
 			x.tower[i] = nextOffset
@@ -267,7 +265,7 @@ func (s *Skiplist) Put(key, value []byte) {
 			// because it is unlikely that lots of nodes are inserted between prev[i] and next[i].
 			prev[i], next[i] = s.findSpliceForLevel(key, prev[i], i)
 			if prev[i] == next[i] {
-				util.AssertTruef(i == 0, "Equality can happen only on base level: %d", i)
+				AssertTruef(i == 0, "Equality can happen only on base level: %d", i)
 				prev[i].setValue(s.allocator, value)
 				return
 			}
@@ -414,7 +412,7 @@ func randomHeight() int {
 }
 
 // newNode the base level is already allocated in the node struct.
-func newNode(allocator util.Allocator, key, value []byte, height int) *node {
+func newNode(allocator Allocator, key, value []byte, height int) *node {
 	offset := putNode(allocator, height)
 	node := getNode(allocator, offset)
 	node.keyOffset = putSlice(allocator, key)
@@ -429,11 +427,11 @@ func (n *node) getValueOffset() (uint32, uint16) {
 	return decodeValue(value)
 }
 
-func (n *node) key(allocator util.Allocator) []byte {
+func (n *node) key(allocator Allocator) []byte {
 	return allocator.Acquire(n.keyOffset, uint32(n.keySize))
 }
 
-func (n *node) setValue(allocator util.Allocator, v []byte) {
+func (n *node) setValue(allocator Allocator, v []byte) {
 	valOffset := putSlice(allocator, v)
 	value := encodeValue(valOffset, uint16(len(v)))
 	atomic.StoreUint64(&n.value, value)
@@ -449,7 +447,7 @@ func (n *node) casNextOffset(h int, old, val uint32) bool {
 
 // putNode compute the amount of the tower that will never be used,
 // since the height is less than maxHeight.
-func putNode(allocator util.Allocator, height int) uint32 {
+func putNode(allocator Allocator, height int) uint32 {
 	unusedSize := (maxHeight - height) * int(unsafe.Sizeof(uint32(0)))
 	begin, _ := allocator.AllocateSlotAligned(uint32(MaxNodeSize-unusedSize), uint32(nodeAlign))
 	return begin
@@ -457,7 +455,7 @@ func putNode(allocator util.Allocator, height int) uint32 {
 
 // getNode returns a pointer to the node located at offset. If the offset is
 // zero, then the nil node pointer is returned.
-func getNode(allocator util.Allocator, offset uint32) *node {
+func getNode(allocator Allocator, offset uint32) *node {
 	if offset == 0 {
 		return nil
 	}
@@ -467,7 +465,7 @@ func getNode(allocator util.Allocator, offset uint32) *node {
 
 // getNodeOffset returns the offset of node in the arena. If the node pointer is
 // nil, then the zero offset is returned.
-func getNodeOffset(allocator util.Allocator, nd *node) uint32 {
+func getNodeOffset(allocator Allocator, nd *node) uint32 {
 	if nd == nil {
 		return 0
 	}
@@ -476,7 +474,7 @@ func getNodeOffset(allocator util.Allocator, nd *node) uint32 {
 	return uint32(uintptr(unsafe.Pointer(nd)) - uintptr(unsafe.Pointer(&buf[0])))
 }
 
-func putSlice(allocator util.Allocator, v []byte) uint32 {
+func putSlice(allocator Allocator, v []byte) uint32 {
 	begin, end := allocator.AllocateSlot(uint32(len(v)))
 	n := copy(allocator.Acquire(begin, end-begin), v)
 	if n != len(v) {
@@ -524,13 +522,13 @@ func (s *Iterator) Value() []byte {
 
 // Next advances to the next position.
 func (s *Iterator) Next() {
-	util.AssertTrue(s.Valid())
+	AssertTrue(s.Valid())
 	s.n = s.list.getNext(s.n, 0)
 }
 
 // Prev advances to the previous position.
 func (s *Iterator) Prev() {
-	util.AssertTrue(s.Valid())
+	AssertTrue(s.Valid())
 	s.n, _ = s.list.findNear(s.Key(), true, false) // find <. No equality allowed.
 }
 

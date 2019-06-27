@@ -12,32 +12,12 @@
 // ee the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package wisckey
 
-import (
-	"encoding/binary"
-	"math"
+import "github.com/pkg/errors"
 
-	"github.com/pkg/errors"
+var (
+	// ErrValueThreshold is returned when ValueThreshold is set to a value close to or greater than
+	// uint16.
+	ErrValueThreshold = errors.New("Invalid ValueThreshold, must be lower than uint16")
 )
-
-// ErrEOF indicates an end of file when trying to read from a memory mapped file
-// and encountering the end of slice.
-var ErrEOF = errors.New("End of mapped region")
-
-// ParseTs parses the timestamp from the key bytes.
-func ParseTs(key []byte) uint64 {
-	if len(key) <= 8 {
-		return 0
-	}
-	return math.MaxUint64 - binary.BigEndian.Uint64(key[len(key)-8:])
-}
-
-// ParseKey parses the actual key from the key bytes.
-func ParseKey(key []byte) []byte {
-	if key == nil {
-		return nil
-	}
-	AssertTrue(len(key) > 8)
-	return key[:len(key)-8]
-}

@@ -29,18 +29,18 @@ type MemTable interface {
 	Empty() bool
 	Put(key []byte, value LSMValue)
 	Get(key []byte) LSMValue
-	NewIterator() *Iterator
-	NewUniIterator(reversed bool) *UniIterator
+	NewIterator() *util.Iterator
+	NewUniIterator(reversed bool) *util.UniIterator
 }
 
 type memTable struct {
-	*Skiplist
+	*util.Skiplist
 }
 
 // NewMemTable make a new empty mem table.
 func NewMemTable(arenaSize int64) MemTable {
-	return &memTable{Skiplist: NewSkiplist(arenaSize,
-		KeyComparator(MemTabKeyComparator), KeyEqualizer(MemTabKeyEqualizer))}
+	return &memTable{Skiplist: util.NewSkiplist(arenaSize,
+		util.KeyComparator(MemTabKeyComparator), util.KeyEqualizer(MemTabKeyEqualizer))}
 }
 
 // MemTabKeyComparator checks the key without timestamp and checks the timestamp if keyNoTs
@@ -131,4 +131,26 @@ func (v *LSMValue) EncodeTo(buf *bytes.Buffer) {
 	sz := binary.PutUvarint(enc[:], v.ExpiresAt)
 	buf.Write(enc[:sz])
 	buf.Write(v.Value)
+}
+
+// EncodedSize is the size of the ValueStruct when encoded
+func (v *LSMValue) EncodedSize() uint16 {
+	sz := len(v.Value) + 2 // meta, usermeta.
+	if v.ExpiresAt == 0 {
+		return uint16(sz + 1)
+	}
+
+	enc := sizeVarint(v.ExpiresAt)
+	return uint16(sz + enc)
+}
+
+func sizeVarint(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
 }

@@ -12,32 +12,34 @@
 // ee the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package wisckey
 
 import (
-	"encoding/binary"
 	"math"
 
-	"github.com/pkg/errors"
+	"github.com/shimingyah/wisckey/table"
+	"github.com/shimingyah/wisckey/util"
 )
 
-// ErrEOF indicates an end of file when trying to read from a memory mapped file
-// and encountering the end of slice.
-var ErrEOF = errors.New("End of mapped region")
+// DB provides the thread-safe various functions required to interact with wisckey.
+type DB struct {
+	opt Options
 
-// ParseTs parses the timestamp from the key bytes.
-func ParseTs(key []byte) uint64 {
-	if len(key) <= 8 {
-		return 0
-	}
-	return math.MaxUint64 - binary.BigEndian.Uint64(key[len(key)-8:])
+	// latest (actively written) in-memory table
+	mtab table.MemTable
+
+	// immutable mem table
+	immtab []table.MemTable
 }
 
-// ParseKey parses the actual key from the key bytes.
-func ParseKey(key []byte) []byte {
-	if key == nil {
-		return nil
+// Open returns a new DB object.
+func Open(opt Options) (*DB, error) {
+	opt.maxBatchSize = (15 * opt.MaxTableSize) / 100
+	opt.maxBatchCount = opt.maxBatchSize / int64(util.MaxNodeSize)
+
+	if opt.ValueThreshold > math.MaxUint16-16 {
+		return nil, ErrValueThreshold
 	}
-	AssertTrue(len(key) > 8)
-	return key[:len(key)-8]
+
+	return nil, nil
 }
