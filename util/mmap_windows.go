@@ -1,4 +1,3 @@
-
 // Copyright 2019 shimingyah. All rights reserved.
 //
 // Copyright 2017 Dgraph Labs, Inc. and Contributors.
