@@ -17,10 +17,10 @@
 package table
 
 import (
-	"encoding/binary"
 	"bytes"
-	"math"
+	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/AndreasBriese/bbloom"
 	"github.com/shimingyah/wisckey/util"
@@ -28,7 +28,7 @@ import (
 
 var (
 	// Might want to change this to be based on total size instead of numKeys.
-	restartInterval = 100 
+	restartInterval = 100
 )
 
 type header struct {
