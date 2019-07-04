@@ -58,6 +58,10 @@ type Options struct {
 	// Maximum number of Level 0 tables before we start compacting.
 	NumLevelZeroTables int
 
+	// If we hit this number of Level 0 tables, we will stall until L0 is
+	// compacted away.
+	NumLevelZeroTablesStall int
+
 	// Maximum total size for L1.
 	LevelOneSize int64
 
@@ -84,6 +88,7 @@ var DefaultOptions = Options{
 	ValueThreshold:     512,
 	NumMemtables:       5,
 	NumLevelZeroTables: 5,
+	NumLevelZeroTablesStall:10,
 	LevelOneSize:       256 << 20,
 	NumCompactors:      2,
 }

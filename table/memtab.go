@@ -48,19 +48,12 @@ func NewMemTable(arenaSize int64) MemTable {
 // a<timestamp> would be sorted higher than aa<timestamp> if we use bytes.compare
 // All keys should have timestamp.
 func MemTabKeyComparator(key1, key2 []byte) int {
-	util.AssertTrue(len(key1) > 8 && len(key2) > 8)
-	if cmp := bytes.Compare(key1[:len(key1)-8], key2[:len(key2)-8]); cmp != 0 {
-		return cmp
-	}
-	return bytes.Compare(key1[len(key1)-8:], key2[len(key2)-8:])
+	return util.CompareKeys(key1, key2)
 }
 
 // MemTabKeyEqualizer checks for key equality ignoring the version timestamp suffix.
 func MemTabKeyEqualizer(key1, key2 []byte) bool {
-	if len(key1) != len(key2) {
-		return false
-	}
-	return bytes.Equal(util.ParseKey(key1), util.ParseKey(key2))
+	return util.SameKey(key1, key2)
 }
 
 // Put inserts the key-value pair.

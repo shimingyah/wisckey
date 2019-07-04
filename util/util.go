@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // ErrEOF indicates an end of file when trying to read from a memory mapped file
@@ -42,7 +43,7 @@ const (
 
 var (
 	// This is O_DSYNC (datasync) on platforms that support it -- see file_unix.go
-	datasyncFileFlag = 0x0
+	datasyncFileFlag = unix.O_DSYNC
 
 	// CastagnoliCrcTable is a CRC32 polynomial table
 	CastagnoliCrcTable = crc32.MakeTable(crc32.Castagnoli)

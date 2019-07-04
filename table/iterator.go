@@ -17,51 +17,64 @@
 package table
 
 import (
+	"bytes"
+	"container/heap"
 	"io"
 	"math"
 	"sort"
-	"bytes"
 
 	"github.com/pkg/errors"
 	"github.com/shimingyah/wisckey/util"
 )
 
-// Iterator is an iterator for a Table.
-type Iterator struct {
+// Iterator is an interface for a basic iterator.
+// All iterators should be closed so that file garbage collection works.
+type Iterator interface {
+	Key() []byte
+	Value() LSMValue
+	Valid() bool
+	Next()
+	Rewind()
+	Seek(key []byte)
+	Close() error
+}
+
+// tableIterator is an iterator for a Table.
+type tableIterator struct {
 	t    *Table
 	bpos int
 	bi   *blockIterator
 	err  error
 
-	// Internally, Iterator is bidirectional. However, we only expose the
+	// Internally, tableIterator is bidirectional. However, we only expose the
 	// unidirectional functionality for now.
 	reversed bool
 }
 
 // NewIterator returns a new iterator of the Table
-func (t *Table) NewIterator(reversed bool) *Iterator {
+func (t *Table) NewIterator(reversed bool) *tableIterator {
 	t.IncrRef() // Important.
-	ti := &Iterator{t: t, reversed: reversed}
+	ti := &tableIterator{t: t, reversed: reversed}
 	ti.next()
 	return ti
 }
 
 // Close closes the iterator (and it must be called).
-func (itr *Iterator) Close() error {
+func (itr *tableIterator) Close() error {
 	return itr.t.DecrRef()
 }
 
-func (itr *Iterator) reset() {
+func (itr *tableIterator) reset() {
 	itr.bpos = 0
 	itr.err = nil
 }
 
 // Valid follows the y.Iterator interface
-func (itr *Iterator) Valid() bool {
+func (itr *tableIterator) Valid() bool {
 	return itr.err == nil
 }
 
-func (itr *Iterator) seekToFirst() {
+func (itr *tableIterator) seekToFirst() {
 	numBlocks := len(itr.t.blockIndex)
 	if numBlocks == 0 {
 		itr.err = io.EOF
@@ -78,7 +91,7 @@ func (itr *Iterator) seekToFirst() {
 	itr.err = itr.bi.Error()
 }
 
-func (itr *Iterator) seekToLast() {
+func (itr *tableIterator) seekToLast() {
 	numBlocks := len(itr.t.blockIndex)
 	if numBlocks == 0 {
 		itr.err = io.EOF
@@ -95,7 +108,7 @@ func (itr *Iterator) seekToLast() {
 	itr.err = itr.bi.Error()
 }
 
-func (itr *Iterator) seekHelper(blockIdx int, key []byte) {
+func (itr *tableIterator) seekHelper(blockIdx int, key []byte) {
 	itr.bpos = blockIdx
 	block, err := itr.t.block(blockIdx)
 	if err != nil {
@@ -108,7 +121,7 @@ func (itr *Iterator) seekHelper(blockIdx int, key []byte) {
 }
 
 // seekFrom brings us to a key that is >= input key.
-func (itr *Iterator) seekFrom(key []byte, whence int) {
+func (itr *tableIterator) seekFrom(key []byte, whence int) {
 	itr.err = nil
 	switch whence {
 	case origin:
@@ -148,12 +161,12 @@ func (itr *Iterator) seekFrom(key []byte, whence int) {
 }
 
 // seek will reset iterator and seek to >= key.
-func (itr *Iterator) seek(key []byte) {
+func (itr *tableIterator) seek(key []byte) {
 	itr.seekFrom(key, origin)
 }
 
 // seekForPrev will reset iterator and seek to <= key.
-func (itr *Iterator) seekForPrev(key []byte) {
+func (itr *tableIterator) seekForPrev(key []byte) {
 	// TODO: Optimize this. We shouldn't have to take a Prev step.
 	itr.seekFrom(key, origin)
 	if !bytes.Equal(itr.Key(), key) {
@@ -161,7 +174,7 @@ func (itr *Iterator) seekForPrev(key []byte) {
 	}
 }
 
-func (itr *Iterator) next() {
+func (itr *tableIterator) next() {
 	itr.err = nil
 
 	if itr.bpos >= len(itr.t.blockIndex) {
@@ -190,7 +203,7 @@ func (itr *Iterator) next() {
 	}
 }
 
-func (itr *Iterator) prev() {
+func (itr *tableIterator) prev() {
 	itr.err = nil
 	if itr.bpos < 0 {
 		itr.err = io.EOF
@@ -219,18 +232,18 @@ func (itr *Iterator) prev() {
 }
 
 // Key follows the y.Iterator interface
-func (itr *Iterator) Key() []byte {
+func (itr *tableIterator) Key() []byte {
 	return itr.bi.Key()
 }
 
 // Value follows the y.Iterator interface
-func (itr *Iterator) Value() (ret LSMValue) {
+func (itr *tableIterator) Value() (ret LSMValue) {
 	ret.Decode(itr.bi.Value())
 	return
 }
 
 // Next follows the y.Iterator interface
-func (itr *Iterator) Next() {
+func (itr *tableIterator) Next() {
 	if !itr.reversed {
 		itr.next()
 	} else {
@@ -239,7 +252,7 @@ func (itr *Iterator) Next() {
 }
 
 // Rewind follows the y.Iterator interface
-func (itr *Iterator) Rewind() {
+func (itr *tableIterator) Rewind() {
 	if !itr.reversed {
 		itr.seekToFirst()
 	} else {
@@ -248,7 +261,7 @@ func (itr *Iterator) Rewind() {
 }
 
 // Seek follows the y.Iterator interface
-func (itr *Iterator) Seek(key []byte) {
+func (itr *tableIterator) Seek(key []byte) {
 	if !itr.reversed {
 		itr.seek(key)
 	} else {
@@ -260,15 +273,15 @@ func (itr *Iterator) Seek(key []byte) {
 // TableIterators, probably just because it's faster to not be so generic.)
 type ConcatIterator struct {
 	idx      int // Which iterator is active now.
-	cur      *Iterator
-	iters    []*Iterator // Corresponds to tables.
-	tables   []*Table    // Disregarding reversed, this is in ascending order.
+	cur      Iterator
+	iters    []Iterator // Corresponds to tables.
+	tables   []*Table   // Disregarding reversed, this is in ascending order.
 	reversed bool
 }
 
 // NewConcatIterator creates a new concatenated iterator
 func NewConcatIterator(tbls []*Table, reversed bool) *ConcatIterator {
-	iters := make([]*Iterator, len(tbls))
+	iters := make([]Iterator, len(tbls))
 	for i := 0; i < len(tbls); i++ {
 		iters[i] = tbls[i].NewIterator(reversed)
 	}
@@ -369,6 +382,170 @@ func (s *ConcatIterator) Close() error {
 	for _, it := range s.iters {
 		if err := it.Close(); err != nil {
 			return errors.Wrap(err, "ConcatIterator")
+		}
+	}
+	return nil
+}
+
+type elem struct {
+	itr      Iterator
+	nice     int
+	reversed bool
+}
+
+type elemHeap []*elem
+
+func (eh elemHeap) Len() int            { return len(eh) }
+func (eh elemHeap) Swap(i, j int)       { eh[i], eh[j] = eh[j], eh[i] }
+func (eh *elemHeap) Push(x interface{}) { *eh = append(*eh, x.(*elem)) }
+func (eh *elemHeap) Pop() interface{} {
+	// Remove the last element, because Go has already swapped 0th elem <-> last.
+	old := *eh
+	n := len(old)
+	x := old[n-1]
+	*eh = old[0 : n-1]
+	return x
+}
+func (eh elemHeap) Less(i, j int) bool {
+	cmp := util.CompareKeys(eh[i].itr.Key(), eh[j].itr.Key())
+	if cmp < 0 {
+		return !eh[i].reversed
+	}
+	if cmp > 0 {
+		return eh[i].reversed
+	}
+	// The keys are equal. In this case, lower nice take precedence. This is important.
+	return eh[i].nice < eh[j].nice
+}
+
+// MergeIterator merges multiple iterators.
+// NOTE: MergeIterator owns the array of iterators and is responsible for closing them.
+type MergeIterator struct {
+	h        elemHeap
+	curKey   []byte
+	reversed bool
+
+	all []Iterator
+}
+
+// NewMergeIterator returns a new MergeIterator from a list of Iterators.
+func NewMergeIterator(iters []Iterator, reversed bool) *MergeIterator {
+	m := &MergeIterator{all: iters, reversed: reversed}
+	m.h = make(elemHeap, 0, len(iters))
+	m.initHeap()
+	return m
+}
+
+func (s *MergeIterator) storeKey(smallest Iterator) {
+	if cap(s.curKey) < len(smallest.Key()) {
+		s.curKey = make([]byte, 2*len(smallest.Key()))
+	}
+	s.curKey = s.curKey[:len(smallest.Key())]
+	copy(s.curKey, smallest.Key())
+}
+
+// initHeap checks all iterators and initializes our heap and array of keys.
+// Whenever we reverse direction, we need to run this.
+func (s *MergeIterator) initHeap() {
+	s.h = s.h[:0]
+	for idx, itr := range s.all {
+		if !itr.Valid() {
+			continue
+		}
+		e := &elem{itr: itr, nice: idx, reversed: s.reversed}
+		s.h = append(s.h, e)
+	}
+	heap.Init(&s.h)
+	for len(s.h) > 0 {
+		it := s.h[0].itr
+		if it == nil || !it.Valid() {
+			heap.Pop(&s.h)
+			continue
+		}
+		s.storeKey(s.h[0].itr)
+		break
+	}
+}
+
+// Valid returns whether the MergeIterator is at a valid element.
+func (s *MergeIterator) Valid() bool {
+	if s == nil {
+		return false
+	}
+	if len(s.h) == 0 {
+		return false
+	}
+	return s.h[0].itr.Valid()
+}
+
+// Key returns the key associated with the current iterator
+func (s *MergeIterator) Key() []byte {
+	if len(s.h) == 0 {
+		return nil
+	}
+	return s.h[0].itr.Key()
+}
+
+// Value returns the value associated with the iterator.
+func (s *MergeIterator) Value() LSMValue {
+	if len(s.h) == 0 {
+		return LSMValue{}
+	}
+	return s.h[0].itr.Value()
+}
+
+// Next returns the next element. If it is the same as the current key, ignore it.
+func (s *MergeIterator) Next() {
+	if len(s.h) == 0 {
+		return
+	}
+
+	smallest := s.h[0].itr
+	smallest.Next()
+
+	for len(s.h) > 0 {
+		smallest = s.h[0].itr
+		if !smallest.Valid() {
+			heap.Pop(&s.h)
+			continue
+		}
+
+		heap.Fix(&s.h, 0)
+		smallest = s.h[0].itr
+		if smallest.Valid() {
+			if !bytes.Equal(smallest.Key(), s.curKey) {
+				break
+			}
+			smallest.Next()
+		}
+	}
+	if !smallest.Valid() {
+		return
+	}
+	s.storeKey(smallest)
+}
+
+// Rewind seeks to first element (or last element for reverse iterator).
+func (s *MergeIterator) Rewind() {
+	for _, itr := range s.all {
+		itr.Rewind()
+	}
+	s.initHeap()
+}
+
+// Seek brings us to element with key >= given key.
+func (s *MergeIterator) Seek(key []byte) {
+	for _, itr := range s.all {
+		itr.Seek(key)
+	}
+	s.initHeap()
+}
+
+// Close implements Iterator
+func (s *MergeIterator) Close() error {
+	for _, itr := range s.all {
+		if err := itr.Close(); err != nil {
+			return errors.Wrap(err, "MergeIterator")
 		}
 	}
 	return nil
